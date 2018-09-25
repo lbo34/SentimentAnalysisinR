@@ -1,0 +1,13 @@
+---
+title: "Sentiment Analysis in R"
+subtitle: "DataCamp Course by Ted Kwartler"
+author: "Laurent Barcelo"
+date: "September 25, 2017"
+output: 
+  html_notebook:
+    toc: TRUE
+    toc_depth: 2
+---
+
+# 1st Segment - Fast & Dirty: Polarity scoring
+
