@@ -858,4 +858,354 @@ For simplicity's sake, we created a simple custom function called `pol_subsectio
 
 At this point you have omitted the neutral sentences and want to focus on organizing the remaining text. In this exercise we use the `%>%` operator again to forward objects to functions. After some simple cleaning use `comparison.cloud()` to make the visual.
 
+#### Instructions
+* Extract the bits you need from `oz_pol`.
+* Call `select()`, declaring the first column `text` as `text.var` which is the raw text. The second column `polarity` should refer to the polarity scores `polarity`.
+* Now apply `pol_subsections()` to `oz_df`. Call the new object `all_terms`.
+* To create `all_corpus` apply `VectorSource()` to `all_terms` and then `%>%` to `VCorpus()`.
+* Create a term-document matrix, `all_tdm`, using `TermDocumentMatrix()` on `all_corpus`.
+  + Add in the parameters 
+   `control = list(removePunctuation = TRUE, stopwords = stopwords(kind = "en")))`.
+  + Then `%>%` to `as.matrix()` and `%>%` again to `set_colnames(c("positive", "negative"))`.
 
+```{r}
+# data prep
+plaintxt <- readLines("/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Data/oz.txt")
+startstr <- "START OF THIS PROJECT GUTENBERG EBOOK THE WONDERFUL WIZARD OF OZ"
+endstr <- "End of Project Gutenberg's The Wonderful Wizard of Oz, by L. Frank Baum"
+plaintxt_short <- plaintxt[(stringr::str_which(plaintxt, startstr) + 1):(stringr::str_which(plaintxt, endstr) - 1)]
+oz <- plaintxt_short[plaintxt_short != ""]
+oz_pol <- polarity(oz)
+
+# this functions splits a dataframe of text, polarity in 2 subgroups of positive and negative polarities
+pol_subsections <- function(df) {  
+ x.pos <- subset(df$text, df$polarity > 0)  
+ x.neg <- subset(df$text, df$polarity < 0)  
+ x.pos <- paste(x.pos, collapse = " ")  
+ x.neg <- paste(x.neg, collapse = " ")  
+ all.terms <- c(x.pos, x.neg)  
+return(all.terms)    
+}
+
+library(magrittr)
+library(wordcloud)
+
+#oz_pol is an object of polarity class. oz_pol$all$text.var contains the text by line. 
+oz_df <- oz_pol$all %>% 
+  select(text = text.var, polarity = polarity)
+
+#all_terms contain the two collapsed character strings based on positive or negative polarity
+all_terms <- pol_subsections(oz_df)
+  
+# on the fly VCorpus creation with pipes
+all_corpus <- all_terms %>% 
+  VectorSource() %>% 
+  VCorpus()
+
+# terms are split according to frequency in positive lines and negative lines
+all_tdm <- all_corpus %>% 
+  TermDocumentMatrix(control = list(removePunctuation = TRUE, stopwords = stopwords(kind = "en"))) %>% 
+  as.matrix() %>% 
+  set_colnames(c("positive", "negative"))
+
+# this could be all piped from the beginning!
+all_tdm %>% comparison.cloud(max.words = 50, colors = c("darkgreen", "darkred"))
+```
+
+## Emotional introspection
+
+In this exercise you go beyond subsetting on positive and negative language. Instead you will subset text by each of the 8 emotions in Plutchik's emotional wheel to construct a visual. With this approach you will get more clarity in word usage by mapping to a specific emotion instead of just positive or negative.
+
+Using the `tidytext` subjectivity lexicon, `"nrc"`, you perform an `inner_join()` with your text. The `"nrc"` lexicon has the 8 emotions plus positive and negative term classes. So you will have to drop positive and negative words after performing your `inner_join()`. One way to do so is with the negation, `!`, and `grepl()`.
+
+The "Global Regular Expression Print Logical" function, `grepl()`, will return a `True` or `False` if a string pattern is identified in each row. In this exercise you will search for positive OR negative using the `|` operator, representing "or" as shown below. Often this straight line is above the enter key on a keyboard. Since the `!` negation precedes `grepl()`, the `T` or `F` is switched so the "positive|negative" is dropped instead of kept.
+
+> Object <- tibble %>%
+>   filter(!grepl("positive|negative", column_name))
+
+Next you apply `count()` on the identified words along with `spread()` to get the data frame organized.
+
+`comparison.cloud()` requires its input to have row names, so you'll have to convert it to a base-R `data.frame`, calling `data.frame()` with the `row.names` argument.
+
+#### Instructions
+* `inner_join()` `moby` to `nrc`.
+* Using `filter()` with a negation (`!`) and `grepl()` search for "positive|negative". The column to search is called `sentiment`.
+* Use `count()` to count by `sentiment` and `term`.
+* Reshape the data frame with `spread()`, passing in `sentiment`, `n`, and `fill = 0`.
+* Convert to plain data frame with `data.frame()`, making the `term` column into `rownames`.
+* Examine `moby_tidy` using `head()`.
+* Using `moby_tidy`, draw a `comparison.cloud()`.
+  + Limit to `50` words.
+  + Increase the title size to `1.5`.
+
+```{r}
+# data_prep
+moby <- moby %>% select(document = index, term, count)
+
+moby_tidy <- moby %>% 
+  inner_join(get_sentiments("nrc"), by = c("term" = "word")) %>% 
+  filter(!sentiment %in% c("positive", "negative")) %>%  # I don't see why we should use grepl for this???
+  count(sentiment, term) %>% 
+  spread(sentiment, n, fill = 0) %>% #here it is a tibble
+  data.frame(row.names = "term")
+
+head(moby_tidy)
+
+moby_tidy %>% comparison.cloud(max.words = 50, title.size = 1.5)
+```
+
+## Compare & contrast stacked bar chart
+
+Another way to slice your text is to understand how much of the document(s) are made of positive or negative words. For example a restaurant review may have some positive aspects such as "the food was good" but then continue to add "the restaurant was dirty, the staff was rude and parking was awful." As a result, you may want to understand how much of a document is dedicated to positive vs negative language. In this example it would have a higher negative percentage compared to positive.
+
+One method for doing so is to `count()` the positive and negative words then divide by the number of subjectivity words identified. In the restaurant review example, "good" would count as 1 positive and "dirty," "rude," and "awful" count as 3 negative terms. A simple calculation would lead you to believe the restaurant review is 25% positive and 75% negative since there were 4 subjectivity terms.
+
+Start by performing the `inner_join()` on a unified tidy data frame containing 4 books, Agamemnon, Oz, Huck Finn, and Moby Dick. Just like the previous exercise you will use `filter()` and `grepl()`.
+
+To perform the `count()` you have to group the data by book and then sentiment. For example all the positive words for Agamemnon have to be grouped then tallied so that positive words from all books are not mixed. Luckily, you can pass multiple variables into `count()` directly.
+
+#### Instructions
+* Inner join `all_books` to the lexicon, `nrc`.
+* Filter to keep rows where sentiment contains "positive" or "negative". That is, use `grepl()` on the sentiment column, checking without the negation so that `"positive|negative"` are kept.
+* Count by `book` and `sentiment`.
+* Group `books_sent_count` by `book`.
+* Mutate to add a column named `percent`. This should be calculated as 100 times `n` divided by the sum of `n`.
+* Using `book_pos`, plot `percent` vs. `book`, using `sentiment` as the fill color.
+* Add a column layer with `geom_col()`.
+
+```{r}
+# data prep 
+all_books <-  all_books %>% 
+  select(document, term, count, book)
+
+tail(all_books)
+
+books_sent_count <- all_books %>% 
+  inner_join(get_sentiments("nrc"), by = c("term" = "word")) %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  count(book, sentiment)
+
+book_pos <- books_sent_count %>% 
+  group_by(book) %>% 
+  mutate(percent = 100 * n / sum(n))
+
+book_pos %>% ggplot(aes(x = book, y = percent, fill = sentiment)) +
+  geom_col()
+```
+
+## Kernel density plot
+
+Now that you learned about a kernel density plot you can create one! Remember it's like a smoothed histogram but isn't affected by binwidth. This exercise will help you construct a kernel density plot from sentiment values.
+
+In this exercise you will plot 2 kernel densities. One for Agamemnon and another for The Wizard of Oz. For both you will perform an `inner_join()` with the `"afinn"` lexicon. Recall the `"afinn"` lexicon has terms scored from -5 to 5. Once in a tidy format, both books will retain words and corresponding scores for the lexicon.
+
+After that, you need to row bind the results into a larger data frame using `bind_rows()` and create a plot with `ggplot2`.
+
+From the visual you will be able to understand which book uses more positive versus negative language. There is clearly overlap as negative things happen to Dorothy but you could infer the kernel density is demonstrating a greater probability of positive language in the Wizard of Oz compared to Agamemnon.
+
+We've loaded `ag` and `oz` as tidy versions of Agamemnon and The Wizard of Oz respectively, and created `afinn` as a subset of the tidytext `"afinn"` lexicon.
+
+#### Instructions
+* Inner join `ag` to the lexicon, `afinn`, assigning to `ag_afinn`.
+* Do the same for The Wizard of Oz. This is the same code, but starting with the `oz` dataset and assigning to `oz_afinn`.
+* Use `bind_rows()` to combine `ag_afinn` to `oz_afinn`. Set the `.id` argument to `"book"` to create a new column with the name of each book.
+* Using `all_df`, plot score, using `book` as the `fill` color.
+* Set the `alpha` transparency to `0.3`.
+
+```{r}
+# data prep
+ag <- ag_tidy
+
+ag_afinn <- ag %>% 
+  inner_join(get_sentiments("afinn"), by = c("term" = "word"))
+
+oz_afinn <- oz %>% 
+  inner_join(get_sentiments("afinn"), by = c("term" = "word"))
+
+all_df <- bind_rows(agamemnon = ag_afinn, oz = oz_afinn, .id = "book") # this ways it correctly labels the new "book" column
+
+all_df %>% ggplot(aes(x = score, fill = book)) + 
+  geom_density(alpha = 0.3) + 
+  theme_gdocs() +
+  ggtitle("AFINN Score Densities")
+```
+
+## Box plot
+
+An easy way to compare multiple distributions is with a box plot. This code will help you construct multiple box plots to make a compact visual.
+
+In this exercise the `all_book_polarity` object is already loaded. The data frame contains two columns, `book` and `polarity`. It comprises all books with `qdap`'s `polarity()` function applied. Here are the first 3 rows of the large object.
+
+ ""  | book |	polarity 
+--|--|--
+14 |	huck	| 0.2773501
+22 |	huck	| 0.2581989
+26 |	huck  |	-0.5773503
+
+This exercise introduces `tapply()` which allows you to apply functions over a ragged array. You input a vector of values and then a vector of factors. For each factor, value combination the third parameter, a function like min(), is applied. For example here's some code with tapply() used on two vectors.
+
+> f1 <- as.factor(c("Group1", "Group2", "Group1", "Group2"))  
+> stat1 <- c(1, 2, 1, 2)  
+> tapply(stat1, f1, sum)  
+
+The result is an array where Group1 has a value of 2 (1+1) and Group2 has a value of 4 (2+2).
+
+#### Instructions
+* Since it's already loaded, examine the `all_book_polarity` with `str()`.
+* Using `tapply()`, pass in `all_book_polarity$polarity`, `all_book_polarity$book` and the `summary()` function. This will print the summary statistics for the 4 books in terms of their `polarity()` scores. You would expect to see Oz and Huck Finn to have higher averages than Agamemnon or Moby Dick. Pay close attention to the median.
+* Create a box plot with `ggplot()` by passing in `all_book_polarity`.
+  + Aesthetics should be `aes(x = book, y = polarity)`.
+  + Using a + add the `geom_boxplot()` with `col = "darkred"`. Pay close attention to the dark line in each box representing median.
+  + Next add another layer called `geom_jitter()` to add points for each of the words.
+  
+```{r}
+all_book_polarity <- readRDS("/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Data/all_book_polarity.rds")
+
+str(all_book_polarity)
+
+tapply(all_book_polarity$polarity, all_book_polarity$book, summary) #summary on polarity grouped by book.
+
+all_book_polarity %>% ggplot(aes(x = book, y = polarity)) +
+  geom_boxplot(fill = c("#bada55", "#F00B42", "#F001ED", "#BA6E15"), col = "darkred") +
+  geom_jitter(position = position_jitter(width = 0.1, height = 0), alpha = 0.02) +
+  theme_gdocs() +
+  ggtitle("Book Polarity")
+```
+  
+## Radar chart
+
+Remember Plutchik's wheel of emotion? The NRC lexicon has the 8 emotions corresponding to the first ring of the wheel. Previously you created a `comparison.cloud()` according to the 8 primary emotions. Now you will create a radar chart similar to the wheel in this exercise.
+
+A `radarchart` is a two-dimensional representation of multidimensional data (at least 3). In this case the tally of the different emotions for a book are represented in the chart. Using a radar chart, you can review all 8 emotions simultaneously.
+
+As before we've loaded the `"nrc"` lexicon as `nrc` and `moby_huck` which is a combined tidy version of both Moby Dick and Huck Finn.
+
+In this exercise you once again use a negated `grepl()` to remove "positive|negative" emotional classes from the chart. As a refresher here is an example:
+
+> object <- tibble %>%  
+>   filter(!grepl("positive|negative", column_name))
+
+This exercise reintroduces `spread()` which rearranges the tallied emotional words. As a refresher consider this raw data called `datacamp`.
+
+people	| food	| like
+--|--|--
+Nicole	| bread	| 78
+Nicole	| salad	| 66
+Ted | bread	| 99
+Ted |	salad	| 21
+
+If you applied `spread()` as in `spread(datacamp, people, like)` the data looks like this.
+
+food |	Nicole |	Ted
+--|--|--
+bread |	78 |	99
+salad |	66 |	21
+
+#### Instructions
+* Review `moby_huck` with `tail()`.
+* `inner_join()` `moby_huck` and `nrc`.
+* Next, `filter()` negating "positive|negative" in the `sentiment` column. Assign the result to `books_pos_neg`.
+* After `books_pos_neg` is forwarded to `group_by()` with `book` and `sentiment`. Then `tally()` the object with an empty `*` function.
+* Then `spread()` the `books_tally` by the `book` and `n` column.
+* Review the `scores` data.
+* Call `chartJSRadar()` on scores which is an `htmlwidget` from the `radarchart` package.
+
+```{r}
+# data prep
+moby_huck <- all_books %>%  
+  filter(book %in% c("moby_dick", "huck_finn")) %>% 
+  select(book, document, term, count)
+
+tail(moby_huck)
+
+books_pos_neg <- moby_huck %>%
+  inner_join(get_sentiments("nrc"), by = c("term" = "word")) %>% 
+  filter(!sentiment %in% c("positive", "negative"))
+
+books_pos_neg %>% 
+  group_by(book, sentiment) %>% 
+  tally() %>% 
+  spread(book, n, fill = 0)
+
+## similar to
+scores <- books_pos_neg %>% 
+  count(book, sentiment) %>% 
+  spread(book, n, fill = 0)
+
+scores
+
+# in one shot
+scores <- moby_huck %>%
+  inner_join(get_sentiments("nrc"), by = c("term" = "word")) %>% 
+  filter(!sentiment %in% c("positive", "negative")) %>% 
+  count(book, sentiment) %>% 
+  spread(book, n, fill = 0)
+
+scores
+
+library(radarchart)
+
+chartJSRadar(scores)
+```
+
+## Treemaps for groups of documents
+
+Often you will find yourself working with documents in groups, such as author, product or by company. This exercise lets you learn about the text while retaining the groups in a compact visual. For example, with customer reviews grouped by product you may want to explore multiple dimensions of the customer reviews at the same time. First you could calculate the `polarity()` of the reviews. Another dimension may be length. Document length can demonstrate the emotional intensity. If a customer leaves a short "great shoes!" one could infer they are actually less enthusiastic compared to a lengthier positive review. You may also want to group reviews by product type such as women's, men's and children's shoes. A **treemap** lets you examine all of these dimensions.
+
+For text analysis, within a treemap each individual box represents a document such as a tweet. Documents are grouped in some manner such as author. The size of each box is determined by a numeric value such as number of words or letters. The individual colors are determined by a sentiment score.
+
+After you organize the tibble, you use the [`treemap`](https://www.rdocumentation.org/packages/treemap/versions/2.4-2) library containing the function `treemap()` to make the visual. The code example below declares the data, grouping variables, size, color and other aesthetics.
+
+> treemap(  
+>  data_frame,  
+>  index = c("group", "individual_document"),  
+>  vSize = "doc_length",  
+>  vColor = "avg_score",  
+>  type = "value",  
+>  title = "Sentiment Scores by Doc",  
+>  palette = c("red", "white", "green")  
+> )
+
+The pre-loaded `all_books` object contains a combined tidy format corpus with 4 Shakespeare, 3 Melville and 4 Twain books. Based on the treemap you should be able to tell who writes longer books, and the polarity of the author as a whole and for individual books.  
+
+#### Instructions
+* Calculate each book's length in a new object called `book_length` using `count()` with the book column.
+* Inner join `all_books` to the lexicon, `afinn`.
+* Group by `author` and `book`.
+* Use `summarize()` to calculate the `mean_score` as the `mean()` of `score`.
+* Inner join again, this time to `book_length`. Join by the book column.
+* Draw a treemap, setting the following arguments.
+  + Use the `book_tree` from the previous step.
+  + Specify the aggregation `index` columns as `"author"` and `"book"`.
+  + Specify the vertex size column, `vSize`, as `"n"`.
+  + Specify the vertex color column, `vColor`, as `"mean_score"`.
+  + Specify a direct mapping from `vColor` to the palette by setting `type = "value"`.
+
+```{r}
+# data prep
+all_books <- readRDS("/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Data/all_books.rds")
+
+book_length <- all_books %>% 
+  count(book)
+
+book_tree <- all_books %>% 
+  inner_join(get_sentiments("afinn"), by = c("term" = "word")) %>% 
+  group_by(author, book) %>% 
+  summarise(mean_score = mean(score)) %>% 
+  inner_join(book_length)
+
+book_tree
+
+library(treemap)
+
+treemap(dtf = book_tree,
+        index = c("author", "book"),
+        vSize = "n",
+        vColor = "mean_score",
+        type = "value",
+        title = "Book Sentiment Scores",
+        palette = c("red", "white", "green")
+        )
+```
+
+# 4th Segment - Case study: Airbnb reviews
