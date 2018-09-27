@@ -9,5 +9,853 @@ output:
     toc_depth: 2
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = F)
+```
+
 # 1st Segment - Fast & Dirty: Polarity scoring
+
+## Jump right in! Visualize polarity
+
+Sentiment analysis helps you extract an author's feelings towards a subject. This exercise will give you a taste of what's to come!
+
+We created `text_df` representing a conversation with `person` and `text` columns.
+
+Use `qdap`'s `polarity()` function to score `text_df`. `polarity()` will accept a single character object or data frame with a grouping variable to calculate a positive or negative score.
+
+In this example you will use the `magrittr` package's dollar pipe operator `%$%`. The dollar sign forwards the data frame into `polarity()` and you declare a text column name or the text column and a grouping variable without quotes.
+
+> text_data_frame %$% polarity(text_column_name)
+
+To create an object with the dollar sign operator:
+
+> polarity_object <- text_data_frame %$%   
+>  polarity(text_column_name, grouping_column_name)
+
+More specifically, to make a quantitative judgement about the sentiment of some text, you need to give it a score. A simple method is a positive or negative value related to a sentence, passage or a collection of documents called a corpus. Scoring with positive or negative values only is called "polarity." A useful function for extracting polarity scores is `counts()` applied to the polarity object. For a quick visual call `plot()` on the `polarity()` outcome.
+
+#### Instructions
+* Examine the `text_df` conversation data frame.
+* Using `%$%` pass `text_df` to `polarity()` along with the column name text without quotes. This will print the polarity for all text.
+* Create a new object `datacamp_conversation` by forwarding `text_df` with `%$%` to `polarity()`. Pass in text followed by the grouping person column. This will calculate polarity according to each individual person. Since it is all within parentheses the result will be printed too.
+* Apply `counts()` to datacamp_conversation to print the specific emotional words that were found.
+* `plot()` the datacamp_conversation.
+
+```{r echo = F}
+text_df <- data.frame(matrix(NA, nrow = 8, ncol = 2))
+text_df[,1] <- as.factor(c("Nick ", "Jonathan", "Martijn",  "Nicole", "Nick", "Jonathan", "Martijn", "Nicole"))
+text_df[,2] <- as.factor(c("DataCamp courses are the best", "I like talking to students", "Other online data science curricula are boring.", "What is for lunch?", "DataCamp has lots of great content!", "Students are passionate and are excited to learn", "Other data science curriculum is hard to learn and difficult to understand", "I think the food here is good."))
+colnames(text_df) <- c("person", "text")
+```
+
+```{r}
+library(magrittr)
+library(qdap)
+library(tidyverse)
+text_df
+
+text_df %$% polarity(text)
+
+# Calc polarity score by person
+(datacamp_conversation <- text_df %$% polarity(text, person))
+
+counts(datacamp_conversation)
+
+plot(datacamp_conversation)
+```
+
+## TM refresher (I)
+
+In the Text Mining: Bag of Words course you learned that a corpus is a set of texts, and you studied some functions for preprocessing the text. To recap, one way to create a corpus is with the functions below. Even though this is a different course, sentiment analysis is part of text mining so a refresher can be helpful.
+
+* Turn a character vector into a text source using `VectorSource()`.
+* Turn a text source into a corpus using `VCorpus()`.
+* Remove unwanted characters from the corpus using cleaning functions like `removePunctuation()` and `stripWhitespace()` from `tm`, and `replace_abbreviation()` from `qdap`.
+
+In this exercise a custom `clean_corpus()` function has been created using standard preprocessing functions for easier application.
+
+`clean_corpus()` accepts the output of `VCorpus()` and applies cleaning functions. For example:
+
+> processed_corpus <- clean_corpus(my_corpus)
+
+#### Instructions
+Your R session has a text vector, `tm_define`, containing two small documents and the function `clean_corpus()`.
+
+* Create an object called `tm_vector` by applying `VectorSource()` to `tm_define`.
+* Make `tm_corpus` using `VCorpus()` on `tm_vector`.
+* Use `content()` to examine the contents of the first document in `tm_corpus`.
+  + Documents in the corpus are accessed using list syntax, so use double square brackets, e.g. `[[1]]`.
+* Clean the corpus text using the custom function `clean_corpus()` on `tm_corpus`. Call this new object `tm_clean`.
+* Examine the first document of the new `tm_clean` object again to see how the text changed after `clean_corpus()` was applied.
+
+```{r}
+# data prep
+library(tm)
+clean_corpus <- function(corpus){
+  corpus <- tm_map(corpus, content_transformer(replace_abbreviation))
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "coffee"))
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, stripWhitespace)
+  return(corpus)
+}
+
+tm_define <- c("Text mining is the process of distilling actionable insights from text.", "Sentiment analysis represents the set of tools to extract an author's feelings towards a subject.")
+
+tm_vector <- VectorSource(tm_define)
+tm_corpus <- VCorpus(tm_vector)
+content(tm_corpus[[1]])
+tm_clean <- clean_corpus(tm_corpus)
+content(tm_clean[[1]])
+```
+
+## TM refresher (II)
+
+Now let's create a Document Term Matrix (DTM). In a DTM:
+
+* Each row of the matrix represents a document.
+* Each column is a unique word token.
+* Values of the matrix correspond to an individual document's word usage.
+
+The DTM is the basis for many bag of words analyses. Later in the course, you will also use the related Term Document Matrix (TDM). This is the transpose; that is, columns represent documents and rows represent unique word tokens.
+
+You should construct a DTM after cleaning the corpus (using `clean_corpus()`). To do so, call `DocumentTermMatrix()` on the corpus object.
+
+> tm_dtm <- DocumentTermMatrix(tm_clean
+
+If you need a more in-depth refresher check out the Text Mining: Bag of Words course. Hopefully these two exercises have prepared you well enough to embark on your sentiment analysis journey!
+
+#### Instructions
+We've created a `VCorpus()` object called `clean_text` containing 1000 tweets mentioning coffee. The tweets have been cleaned with the previously mentioned preprocessing steps and your goal is to create a DTM from it.
+
+* Apply `DocumentTermMatrix()` to the `clean_text` corpus to create a term frequency weighted DTM called `tf_dtm`.
+* Change the `DocumentTermMatrix()` object into a simple matrix with `as.matrix()`. Call the new object `tf_dtm_m`.
+* Check the dimensions of the matrix using `dim()`.
+* Use square bracket indexing to see a subset of the matrix.
+  + Select rows 16 to 20, and columns 2975 to 2985
+* Note the frequency value of the word "working."
+
+```{r}
+# data prep
+coffee <- read_csv("/Users/lbarcelo/R_Repo/Rdatasets/DataCamp/Text Minings - Bags of Words/coffee.csv")
+coffee_tweets <- coffee$text
+coffee_source <- VectorSource(coffee_tweets)
+coffee_corpus <- VCorpus(coffee_source)
+clean_text <- clean_corpus(coffee_corpus)
+
+clean_text
+tf_dtm <- DocumentTermMatrix(clean_text)
+tf_dtm_m <- as.matrix(tf_dtm)
+dim(tf_dtm_m)
+tf_dtm_m[16:20, 2975:2985]
+tf_dtm_m[1:200, "working"]
+```
+
+## Where can you observe Zipf's law?
+
+Although Zipf observed a steep and predictable decline in word usage you may not buy into Zipf's law. You may be thinking "I know plenty of words, and have a distinctive vocabulary". That may be the case, but the same can't be said for most people! To prove it, let's construct a visual from 3 million tweets mentioning "#sb". Keep in mind that the visual doesn't follow Zipf's law perfectly, the tweets all mentioned the same hashtag so it is a bit skewed. That said, the visual you will make follows a steep decline showing a small lexical diversity among the millions of tweets. So there is some science behind using lexicons for natural language analysis!
+
+In this exercise, you will use the package `metricsgraphics`. Although the author suggests using the pipe `%>%` operator, you will construct the graphic step-by-step to learn about the various aspects of the plot. The main function of the package `metricsgraphics` is the `mjs_plot()` function which is the first step in creating a JavaScript plot. Once you have that, you can add other layers on top of the plot.
+
+An example `metricsgraphics` workflow without using the `%>%` operator is below:
+
+> metro_plot <- mjs_plot(data, x = x_axis_name, y = y_axis_name, show_rollover_text = FALSE)  
+> metro_plot <- mjs_line(metro_plot)  
+> metro_plot <- mjs_add_line(metro_plot, line_one_values)  
+> metro_plot <- mjs_add_legend(metro_plot, legend = c('names', 'more_names'))  
+> metro_plot
+
+#### Instructions
+* Use `head()` on sb_words to review top words.
+* Create a new column `expectations` by dividing the largetst word frequency, `freq[1]`, by the `rank` column.
+* Start `sb_plot` using `mjs_plot()`.
+  + Pass in `sb_words` with `x = rank` and `y = freq`.
+  + Within `mjs_plot()` set `show_rollover_text` to `FALSE`.
+* Overwrite `sb_plot` using `mjs_line()` and pass in `sb_plot`.
+* Add to `sb_plot` with `mjs_add_line()`.
+  + Pass in the previous `sb_plot` object and the vector, `expectations`.
+* Place a legend on a new `sb_plot` object using `mjs_add_legend()`.
+  + Pass in the previous sb_plot object
+  + The legend labels should consist of `"Frequency"` and `"Expectation"`.
+* Call `sb_plot` to display the plot. Mouseover a point to simultaneously highlight a `freq` and `Expectation` point. The magic of JavaScript!
+
+```{r}
+# Data (sb_words not available)
+# Examine sb_words
+head(sb_words)
+
+# Create expectations
+sb_words$expectations <- sb_words %$% {freq[1] / rank}
+
+# Create metrics plot
+sb_plot <- mjs_plot(sb_words, x = rank, y = freq, show_rollover_text = F)
+
+# Add 1st line
+sb_plot <- mjs_line(sb_plot)
+####
+# Add 2nd line
+sb_plot <- mjs_add_line(sb_plot, expectations)
+
+# Add legend
+sb_plot <- mjs_add_legend(sb_plot, legend = c("Frequency", "Expectation"))
+
+# Display plot
+sb_plot
+```
+
+## Polarity on actual text
+
+So far you have learned the basic components needed for assessing positive or negative intent in text. Remember the following points so you can feel confident in your results.
+
+The subjectivity lexicon is a predefined list of words associated with emotions or positive/negative feelings.
+You don't have to list every word in a subjectivity lexicon because Zipf's law describes human expression.
+A quick way to get started is to use the `polarity()` function which has a built-in subjectivity lexicon.
+
+The function scans the text to identify words in the lexicon. It then creates a word group around the identified positive or negative subjectivity word. Within the group **valence shifters** adjust the score. Valence shifters are words that amplify or negate the emotional intent of the subjectivity word. For example, "well known" is positive while "not well known" is negative. Here "not" is a negating term and reverses the emotional intent of "well known." In contrast, "very well known" employs an amplifier increasing the positive intent.
+
+The `polarity()` function then calculates a score using subjectivity terms, valence shifters and the total number of words in the passage. This exercise demonstrates a simple polarity calculation. In the next video we look under the hood of `polarity()` for more detail.
+
+#### Instructions
+* Calculate the `polarity()` of positive in a new object called pos_score. Encase the entire call in parentheses so the output is also printed.
+
+Manually perfrom the same polarity calculation.
+
+* Get a word count object by calling `counts()` on the polarity object.
+* All the identified subjectivity words are part of count object's list. Specifically, positive words are in `$pos.words` element vector. Find the number of positive words in `n_good` by calling `length()` on the first part of the `$pos.words` element.
+* Capture the total number of words and assign it to n_words. This value is stored in pos_count as the wc element.
+* Deconstruct the polarity() calculation by dividing n_good by sqrt() of n_words. Compare the result to pos_pol to the equation's result.
+
+```{r}
+# Example statement
+positive <- "DataCamp courses are good for learning"
+
+# Calculate polarity of statement
+(pos_score <- polarity(positive))
+
+(pos_counts <- counts(pos_score))
+
+# Number of positive words
+n_good <- length(pos_counts$pos.words[[1]])
+
+# Total number of words
+n_words <- pos_counts$wc
+  
+# Verify polarity score
+n_good / sqrt(n_words)
+```
+
+## Happy songs!
+
+Of course just positive and negative words aren't enough. In this exercise you will learn about valence shifters which tell you about the author's emotional intent. Previously you applied `polarity()` to text without valence shifters. In this example you will see amplifers and negating words in action.
+
+Recall that an amplifying word adds 0.8 to a positive word in `polarity()` so the positive score becomes 1.8. For negative words 0.8 is subtracted so the total becomes -1.8. Then the score is divided by the square root of the total number of words.
+
+Consider the following example from Frank Sinatra:
+
+* **"It was a very good year"**
+
+"Good" equals 1 and "very" adds another 0.8. So, 1.8/sqrt(6) results in 0.73 polarity.
+
+A negating word such as "not" will inverse the subjectivity score. Consider the following example from Bobby McFerrin:
+
+* **"Don't worry Be Happy"**
+
+"worry is now 1 due to the negation "don't." Adding the "happy", +1, equals 2. With 4 total words, 2 / sqrt(4) equals a polarity score of 1.
+
+#### Instructions
+* Examine the conversation data frame, `conversation`. Note the valence shifters like `"never"` in the text column.
+* Apply `polarity()` to the text column of conversation to calculate polarity for the entire conversation.
+* Calculate the polarity scores by student, assigning the result to `student_pol`.
+  + Call `polarity()` again, this time passing two columns of conversation.
+  + The text variable is text and the grouping variable is student.
+* To see the student level results, use `scores()` on `student_pol`.
+* The `counts()` function applied to `student_pol` will print the sentence level polarity for the entire data frame along with lexicon words identified.
+* The polarity object, `student_pol`, can be plotted with `plot()`.
+
+```{r}
+# data prep
+conversation <- data.frame(matrix(NA, nrow = 3, ncol = 2))
+conversation[,1] <- as.factor(c("Martijn", "Nick",  "Nicole"))
+conversation[,2] <- as.factor(c("This restaurant is never bad", "The lunch was very good", "It was awful I got food poisoning and was extremely ill"))
+colnames(conversation) <- c("student", "text")
+
+conversation
+
+conversation %$% polarity(text)
+(student_pol <- conversation %$% polarity(text, student))
+
+scores(student_pol) # same as printing it?
+
+counts(student_pol)
+
+plot(student_pol)
+```
+
+## LOL, this song is wicked good
+
+Even with Zipf's law in action, you will still need to adjust lexicons to fit the text source (for example twitter versus legal documents) or the author's demographics (teenage girl versus middle aged man). This exercise demonstrates the explicit components of `polarity()` so you can change it if needed.
+
+In Trey Songz "Lol :)" song there is a lyric "LOL smiley face, LOL smiley face." In the basic `polarity()` function, "LOL" is not defined as positive. However, "LOL" stands for "Laugh Out Loud" and should be positive. As a result, you should adjust the lexicon to fit the text's context which includes pop-culture slang. If your analysis contains text from a specific channel (Twitter's "LOL"), location (Boston's "Wicked Good"), or age group (teenagers "sick") you will likely have to adjust the lexicon.
+
+In this exercise you are not adjusting the subjectivity lexicon or qdap dictionaries containing valence shifters. Instead you are examining the existing word data frame objects so you can change them in the following exercise.
+
+We've created `text` containing two excerpts from Beyoncé's "Crazy in Love" lyrics for the exercise.
+
+#### Instructions
+* Print `key.pol` to see a portion of the subjectivity words and values.
+* Examine the predefined `negation.words` to print all the negating terms.
+* Now print the `amplification.words` to see the words that add values to the lexicon.
+* Check the `deamplification.words` to print the words that reduce the lexicon values.
+* Call `text` to see conversation.
+* Calculate polarity() as follows.
+  + Set `text.var` to `text$words`.
+  + Set `grouping.var` to `text$speaker`.
+  + Set `polarity.frame` to `key.pol`.
+  + Set `negators` to `negation.words`.
+  + Set `amplifiers` to `amplification.words`.
+  + Set `deamplifiers` to `deamplification.words`.
+
+```{r}
+# Examine the key.pol
+key.pol
+
+# Negators
+negation.words
+
+# Amplifiers
+amplification.words
+
+# De-amplifiers
+deamplification.words
+
+# data prep
+text <- data.frame(matrix(NA, nrow = 2, ncol = 2))
+text[,1] <- as.factor(c("beyonce", "jay_z"))
+text[,2] <- as.factor(c("I know I dont understand Just how your love can do what no one else can", "They cant figure him out they like hey, is he insane"))
+colnames(text) <- c("speaker", "words")
+
+text
+
+polarity(text.var = text$words,
+         grouping.var = text$speaker,
+         polarity.frame = key.pol,
+         negators = negation.words,
+         amplifiers = amplification.words,
+         deamplifiers = deamplification.words)
+
+```
+
+## Stressed Out!
+
+Here you will adjust the negative words to account for the specific text. You will then compare the basic and custom `polarity()` scores.
+
+A popular song from Twenty One Pilots is called "Stressed Out". If you scan the lyrics of this song, you will observe the song is about youthful nostalgia. Overall, most people would say the polarity is negative. Repeatedly the lyrics mention stress, fears and pretending.
+
+Let's compare the song lyrics using the default subjectivity lexicon and also a custom one.
+
+To start, you need to verify the `key.pol` subjectivity lexicon does not already have the term you want to add. One way to check is with `grep()`. The `grep()` function returns the row containing characters that match a search pattern. Here is an example used while indexing.
+
+> data_frame[grep("search_pattern", data_frame$column), ]
+
+After verifying the slang or new word is not already in the `key.pol` lexicon you need to add it. The code below uses `sentiment_frame()` to construct the new lexicon. Within the code `sentiment_frame()` accepts the original positive word vector, `positive.words`. Next, the original `negative.words` are concatenated to "smh" and "kappa", both considered negative slang. Although you can declare the positive and negative weights, the default is 1 and -1 so they are not included below.
+
+> custom_pol <- sentiment_frame(positive.words, c(negative.words, "hate", "pain"))
+
+Now you are ready to apply polarity and it will reference the *custom* subjectivity lexicon!
+
+#### Instructions
+We've created `stressed_out` which contains the lyrics to the song "Stressed Out", by Twenty One Pilots.
+
+* Use `polarity()` on stressed_out to see the default score.
+* Check `key.pol` for any words containing "stress". Use `grep()` to index the data frame by searching in the `x` column.
+* Create `custom_pol` as a new sentiment data frame.
+  + Call `sentiment_frame()` and pass `positive.words` as the first argument without concatenating any new terms.
+  + Next, use `c()` to combine `negative.words` with new terms `"stressed"` and `"turn back"`.
+* Reapply `polarity()` to `stressed_out` with the additional parameter `polarity.frame = custom_pol` to compare how the new words change the score to a more accurate representation of the song.
+
+```{r}
+# data prep
+stressed_out <- "I wish I found some better sounds no ones ever heard\nI wish I had a better voice that sang some better words\nI wish I found some chords in an order that is new\nI wish I didnt have to rhyme every time I sang\nI was told when I get older all my fears would shrink\nBut now Im insecure and I care what people think\nMy names Blurryface and I care what you think\nMy names Blurryface and I care what you think\nWish we could turn back time, to the good old days\nWhen our momma sang us to sleep but now were stressed out\nWish we could turn back time to the good old days\nWhen our momma sang us to sleep but now were stressed out\nWere stressed out\nSometimes a certain smell will take me back to when I was young\nHow come Im never able to identify where its coming from\nId make a candle out of it if I ever found it\nTry to sell it never sell out of it Id probably only sell one\nItd be to my brother, cause we have the same nose\nSame clothes homegrown a stones throw from a creek we used to roam\nBut it would remind us of when nothing really mattered\nOut of student loans and tree-house homes we all would take the latter\nMy names Blurryface and I care what you think\nMy names Blurryface and I care what you think\nWish we could turn back time, to the good old days\nWhen our momma sang us to sleep but now were stressed out\nWish we could turn back time, to the good old days\nWhen our momma sang us to sleep but now were stressed out\nWe used to play pretend, give each other different names\nWe would build a rocket ship and then wed fly it far away\nUsed to dream of outer space but now theyre laughing at our face #\nSaying, Wake up you need to make money\nYeah\nWe used to play pretend give each other different names\nWe would build a rocket ship and then wed fly it far away\nUsed to dream of outer space but now theyre laughing at our face\nSaying, Wake up, you need to make money\nYeah\nWish we could turn back time, to the good old days\nWhen our momma sang us to sleep but now were stressed out\nWish we could turn back time, to the good old days\nWhen our momma sang us to sleep but now were stressed out\nUsed to play pretend, used to play pretend bunny\nWe used to play pretend wake up, you need the money\nUsed to play pretend used to play pretend bunny\nWe used to play pretend, wake up, you need the money\nWe used to play pretend give each other different names\nWe would build a rocket ship and then wed fly it far away\nUsed to dream of outer space but now theyre laughing at our face\nSaying, Wake up, you need to make money\nYeah"
+
+head(stressed_out)
+
+polarity(stressed_out)
+
+key.pol[str_detect(key.pol$x, "stress")] #stringr version
+key.pol[grep("stress", x)] # base version
+
+custom_pol <- sentiment_frame(positive.words, c(negative.words, "stressed", "turn back"))
+
+polarity(text.var = stressed_out, polarity.frame = custom_pol)
+```
+
+# 2nd Segment - Sentiment analysis the tidytext way
+
+<img src="/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Resources/Capture d’écran 2018-09-25 à 17.34.36.png" alt="Plutchik's Wheel of Emotion" width="600"/>
+
+## DTM vs. tidytext matrix
+
+The [tidyverse](https://www.tidyverse.org) is a collection of R packages that share common philosophies and are designed to work together. This chapter covers some tidy functions to manipulate data. In this exercise you will compare a DTM to a tidy text data frame called a tibble.
+
+Within the tidyverse, each observation is a single row in a data frame. That makes working in different packages much easier since the fundamental data structure is the same. Parts of this course borrow heavily from the `tidytext` package which uses this data organization.
+
+For example, you may already be familiar with the `%>%` operator from the magrittr package. This forwards an object on its left-hand side as the first argument of the function on its right-hand side.
+
+In the example below, you are forwarding the `data` object to `function1()`. Notice how the parentheses are empty. This in turn is forwarded to `function2()`. In the last function you don't have to add the data object because it was forwarded from the output of `function1()`. However, you do add a fictitious parameter, some_parameter as `TRUE`. These pipe forwards ultimately create the object.
+
+> object <- data %>%   
+>            function1() %>%  
+>            function2(some_parameter = TRUE)
+
+To use the `%>%` operator, you don't necessarily need to load the `magrittr` package, since it is also available in the `dplyr` package. dplyr also contains the functions `inner_join()` (which you'll learn more about later) and `count()` for tallying data. The last function you'll need is `mutate()` to create new variables or modify existing ones.
+
+> object <- data %>%  
+>  mutate(new_Var_name = Var1 - Var2)
+
+or to modify a variable
+
+> object <- data %>%  
+>  mutate(Var1 = as.factor(Var1))
+  
+You will also use `tidyr`'s `spread()` function to organize the data with each row being a line from the book and the positive and negative values as columns.
+
+**index** |	**negative** |	**positive**
+---|---|---
+42 |	2  |	0
+43 |	0	 |  1
+44 |	1	 |  0
+
+To change a `DTM` to a tidy format use `tidy()` from the `tiditext` package.
+
+> tidy_format <- tidy(Document_Term_Matrix)
+
+This exercise uses text from the Greek tragedy, *Agamemnon*. *Agamemnon* is a story about marital infidelity and murder. You can download a copy [here](http://www.gutenberg.org/ebooks/14417?msg=welcome_stranger).
+
+#### Instructions
+We've already created a clean DTM called `ag_dtm` for this exercise.
+
+* Create `ag_dtm_m` by applying `as.matrix()` to `ag_dtm`.
+* Using brackets, `[` and `]`, index `ag_dtm_m` to row `2206`.
+* Apply `tidy()` to `ag_dtm`. Call the new object `ag_tidy`.
+* Examine `ag_tidy` at rows `[831:835, ]` to compare the tidy format. You will see a common word from the examined part of `ag_dtm_m` in step 2.
+
+```{r}
+# data prep
+agamemnon <- readLines("/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Data/Agamemnon.txt")
+aga_short <- agamemnon[(str_which(agamemnon, "CHARACTERS IN THE PLAY") + 1):(str_which(agamemnon, "NOTES TO THE AGAMEMNON") - 1)]
+aga_short <- aga_short[aga_short != ""]
+aga_vec <- VectorSource(aga_short)
+aga_corp <- VCorpus(aga_vec)
+aga_clean <- clean_corpus(aga_corp)
+content(aga_clean[[1]])
+ag_dtm <- DocumentTermMatrix(aga_clean)
+ag_txt <- aga_short 
+
+# one question would be the difference between all this process and tidytext::unnest_tokens()
+
+ag_dtm_m <- as.matrix(ag_dtm)
+ag_dtm_m[2106, 245:250]
+
+library(broom)
+ag_tidy <- tidy(ag_dtm)
+ag_tidy[831:835,]
+```
+
+## Examine the sentiments data frame
+
+So far you have used a single lexicon. Now we will transition to using three, each measuring sentiment in different ways.
+
+The `tidytext` package contains a data frame called `sentiments`. The data frame contains over 23000 terms from three different subjectivity lexicons with corresponding information. Here are some example rows from the `sentiments` data frame.
+
+**Word** |	**Sentiment** |	**Lexicon**	 | **Score**
+---|---|---|---
+abhorrent |	NA |	AFINN	 |-3
+cool |	NA |	AFINN |	1
+congenial |	positive |	Bing |	NA
+enemy	| negative |	Bing	| NA
+ungrateful | anger	| NRC	| NA
+sectarian|	anger	| NRC	| NA
+
+Notice the tidy format. Each word is a row and NAs fill in columns that are not applicable. The "AFINN" lexicon scores words from 5 to -5. The "Bing" lexicon is the same lexicon used in `qdap`'s `polarity()` function. "Bing" words are only labeled as positive or negative. The "NRC" lexicon has distinct emotional classes covering Plutchik's Wheel and positive and negative.
+
+Let's explore the sentiments data frame in more detail!
+
+#### Instructions
+* Use `get_sentiments()` to obtain the `"afinn"` lexicon, assigning to `afinn_lex`.
+* Review the overall `count()` of score in `afinn_lex`.
+* Do the same again, this time with the `"nrc"` lexicon. That is,
+  + get the sentiments, assigning to `nrc_lex`, then
+  + count the `sentiment` column, assigning to `nrc_counts`.
+* Create a ggplot of `n` vs. `sentiment`.
+* Add a `col` layer using `geom_col()`. (This is like `geom_bar()`, but used when you've already summarized with `count()`.)
+
+
+```{r}
+afinn_lex <- get_sentiments("afinn")
+
+(affin_counts <- afinn_lex %>% 
+  count(score))
+
+nrc_lex <- get_sentiments("nrc")
+
+(nrc_counts <- nrc_lex %>% 
+    count(sentiment))
+
+nrc_counts %>% ggplot(aes(x = sentiment, y = n)) +
+  geom_col() +
+  theme_gdocs()
+```
+
+## Bing tidy polarity: Simple example
+
+The Bing lexicon labels words as positive or negative. The next three exercises let you interact with this specific lexicon. Instead of using `filter()` to extract a lexicon this exercise uses `get_sentiments()` which accepts a string such as "afinn", "bing", "nrc", or "loughran".
+
+Now that you understand the basics of an inner join, let's apply this to the "Bing" lexicon. Keep in mind the `inner_join()` function comes from `dplyr` and the `sentiments` object is from `tidytext`.
+
+The inner join workflow:
+
+* Obtain the correct lexicon using either `filter()` or `get_sentiments()`.
+* Pass the lexicon and the tidy text data to `inner_join()`.
+* In order for `inner_join()` to work there must be a shared column name. If there are no shared column names, declare them with an additional parameter, `by` equal to `c` with column names like below.
+
+> object <- x %>%  
+>    inner_join(y, by = c("column_from_x" = "column_from_y")
+
+* Perform some aggregation and analysis on the table intersection.
+
+#### Instructions
+We've loaded `ag_txt` containing the first 100 lines from Agamemnon and `ag_tidy` which is the tidy version.
+
+* For comparison, use `polarity()` on `ag_txt`.
+* Get the `"bing"` lexicon by passing that string to `get_sentiments()`.
+* Perform an `inner_join()` with `ag_tidy` and `bing`.
+  + The word columns are called `"term"` in `ag_tidy` and `"word"` in the lexicon, so you need to specify the by argument.
+  + Call the new object `ag_bing_words`.
+* Print `ag_bing_words`, and look at some of the words that are in the result.
+* Pass `ag_bing_words` to `count()` of sentiment using the pipe operator, `%>%`. Compare the `polarity()` score to sentiment count ratio.
+
+```{r}
+(ag_pol <- polarity(ag_txt))
+
+bing <- get_sentiments("bing")
+ag_bing_words <- ag_tidy %>% 
+  inner_join(bing, by = c("term" = "word"))
+
+ag_bing_words
+
+ag_bing_words %>% 
+  count(sentiment)
+```
+
+## Bing tidy polarity: Count & spread the white whale
+
+In this exercise you will apply another `inner_join()` using the `"bing"` lexicon.
+
+Then you will manipulate the results with both `count()` from `dplyr` and `spread()` from `tidyr` to learn about the text.
+
+The `spread()` function spreads a key-value pair across multiple columns. In this case key is the sentiment and the values are the frequency of positive or negative terms for each line. Using `spread()` changes the data so that each row now has positive and negative values, even if it is 0.
+
+#### Instructions
+In this exercise, your R session has `m_dick_tidy` which contains the book Moby Dick and `bing`, containing the lexicon similar to the previous exercise.
+
+* Perform an `inner_join()` on `m_dick_tidy` and bing.
+  + As before, join the `"term"` column in `m_dick_tidy` to the `"word"` column in the lexicon.
+  + Call the new object `moby_lex_words`.
+* Create a column `index`, equal to `as.numeric()` applied to `document`. This occurs within `mutate()` in the tidyverse.
+* Create `moby_count` by forwarding `moby_lex_words` to `count()`, passing in `sentiment`, `index`.
+* Generate `moby_spread` by piping `moby_count` to `spread()` which contains sentiment, `n`, and `fill = 0`.
+
+```{r}
+# data prep
+all_books <- readRDS("/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Data/all_books.rds")
+mb_book <- all_books %>% filter(book == "moby_dick")
+m_dick_tidy <- mb_book %>% select(document, term, count)
+
+moby_lex_words <- m_dick_tidy %>% 
+  inner_join(get_sentiments("bing"), by = c("term" = "word"))
+
+
+moby_lex_words <- moby_lex_words %>% mutate(index = as.numeric(document))
+
+(moby_count <- moby_lex_words %>% 
+    count(sentiment, index))
+
+# Spreading the dataframe 
+library(tidyr)
+(moby_spread <- moby_count %>% 
+    spread(sentiment, n, fill = 0))
+```
+
+## Bing tidy polarity: Call me Ishmael (with ggplot2)!
+
+The last Bing lexicon exercise! In this exercise you will use the pipe operator (`%>%`) to create a timeline of the sentiment in Moby Dick. In the end you will also create a simple visual following the code structure below. The next chapter goes into more depth for visuals.
+
+> ggplot(spread_data, aes(index_column, polarity_column)) +  
+>  geom_smooth()
+
+#### Instructions
+* Inner join moby to the `bing` lexicon.
+  + Call `inner_join()` to join the tibbles.
+  + Join by the `term` column in the text and the `word` column in the lexicon.
+* Count by `sentiment` and `index`.
+* Reshape so that each `sentiment` has its own column.
+  + Call `spread()`.
+  + The key column (to split into multiple columns) is `sentiment`.
+  + The value column (containing the counts) is `n`.
+  + Also specify `fill = 0` to fill out missing values with a zero.
+* Use `mutate()` to add the `polarity` column. Define it as the difference between the `positive` and `negative` columns.
+* Using `moby_polarity`, plot `polarity` vs. `index`.
+* Add a smooth trend layer by calling `geom_smooth()` with no arguments.
+
+```{r}
+# data prep 
+moby <- mb_book %>% 
+  mutate(index = as.numeric(document)) %>% 
+  select(term, count, index)
+
+(moby_polarity <- moby %>% 
+    inner_join(get_sentiments("bing"), by = c("term" = "word")) %>% 
+    count(sentiment, index) %>% 
+    spread(sentiment, n, fill = 0) %>% 
+    mutate(polarity = positive - negative))
+
+library(ggplot2)
+
+moby_polarity %>% ggplot(aes(x = index, y = polarity)) +
+  geom_smooth()
+```
+
+## AFINN: I'm your Huckleberry
+
+Now we transition to the AFINN lexicon. The AFINN lexicon has numeric values from 5 to -5, not just positive or negative. Unlike the Bing lexicon's `sentiment`, the AFINN lexicon's sentiment score column is called `score`.
+
+As before, you apply `inner_join()` then `count()`. Next, to sum the scores of each line, we use `dplyr`'s `group_by()` and `summarize()` functions. The `group_by()` function takes an existing data frame and converts it into a grouped data frame where operations are performed "by group". Then, the `summarize()` function lets you calculate a value for each group in your data frame using a function that aggregates data, like `sum()` or `mean()`. So, in our case we can do something like
+
+> data_frame %>%   
+>    group_by(book_line) %>%   
+>    summarize(total_score = sum(book_line))
+
+In the tidy version of *Huckleberry Finn*, line 9703 contains words "best", "ever", "fun", "life" and "spirit". "best" and "fun" have AFINN scores of 3 and 4 respectively. After aggregating, line 9703 will have a total score of 7.
+
+In the tidyverse, `filter()` is preferred to `subset()` because it combines the functionality of `subset()` with simpler syntax. Here is an example that `filter()`s `data_frame` where some value in `column1` is equal to `24`. Notice the column name is not in quotes.
+
+> filter(data_frame, column1 == 24)
+
+The `afinn` object contains the AFINN lexicon. The `huck` object is a tidy version of Mark Twain's Adventures of Huckleberry Finn for analysis.
+
+Line 5400 is *All the loafers looked glad; I reckoned they was used to having fun out of Boggs. Stopwords and punctuation have already been removed in the dataset*.
+
+#### Instructions
+* Run the code to look at line 5400, and see the sentiment scores of some words.
+* `inner_join()` huck to the afinn lexicon.
+  + Remember `huck` is already piped into the function so just add the lexicon.
+  + Join by the `term` column in the text and the `word` column in the lexicon.
+* Use `count()` with score and line to tally/count observations by group.
+* Assign the result to `huck_afinn`.
+* Get the total sentiment score by line forwarding huck_afinn to `group_by()` and passing line without quotes.
+  + Create `huck_afinn_agg` using `summarize()`, setting `total_score` equal to the `sum()` of score * `n`.
+* Use `filter()` on `huck_afinn_agg` and `line == 5400` to review a single line.
+* Create a sentiment timeline. Pass `huck_afinn_agg` to the data argument of `ggplot()`.
+* Then specify the `x` and `y` within `aes()` as line and `total_score` without quotes.
+* Add a layer with `geom_smooth()`.
+
+```{r}
+# data prep
+huck <- all_books %>% 
+  filter(book == "huck_finn") %>% 
+  mutate(line = as.numeric(document)) %>% 
+  select(term, count, line)
+
+huck %>% filter(line == 5400)
+afinn <- get_sentiments("afinn")
+
+# What are the scores of the sentiment words?
+afinn %>% filter(word %in% c("fun", "glad"))
+
+huck_afinn <- huck %>%
+  inner_join(afinn, by = c("term" = "word")) %>% 
+  count(score, line)
+
+huck_afinn_agg <- huck_afinn %>% 
+  group_by(line) %>% 
+  summarise(total_score = sum(score * n))
+
+huck_afinn_agg %>% filter(line == 5400)
+
+huck_afinn_agg %>%
+  ggplot(aes(x = line, y = total_score)) +
+  geom_smooth()
+```
+
+## The wonderful wizard of NRC
+
+Last but not least, you get to work with the NRC lexicon which labels words across multiple emotional states. Remember Plutchik's wheel of emotion? The NRC lexicon tags words according to Plutchik's 8 emotions plus positive/negative.
+
+In this exercise there is a new operator, `%in%`, which matches a vector to another. In the code below `%in%` will return `FALSE`, `FALSE`, `TRUE`. This is because within some_vec, 1 and 2 are not found within some_other_vector but 3 is found and returns `TRUE`. The %in% is useful to find matches.
+
+> some_vec <- c(1, 2, 3)  
+> some_other_vector <- c(3, "a", "b")  
+> some_vec %in% some_other_vector
+
+Another new operator is `!`. For logical conditions, adding `!` will inverse the result. In the above example, the `FALSE`, `FALSE`, `TRUE` will become `TRUE`, `TRUE`, `FALSE`. Using it in concert with `%in%` will inverse the response and is good for removing items that are matched.
+
+> !some_vec %in% some_other_vector
+
+We've created `oz` which is the tidy version of `The Wizard of Oz` along with `nrc` containing the "NRC" lexicon with renamed columns.
+
+#### Instructions
+* Inner join `oz` to the `nrc` lexicon.
+  + Call `inner_join()` to join the tibbles.
+  + Join `by` the `term` column in the text and the `word` column in the lexicon.
+* Filter to only Pluchik's emotions and drop the positive or negative words in the lexicon.
+  + Use `filter()` to keep rows where the sentiment is not `"positive"` or `"negative"`.
+* Group by sentiment.
+  + Call `group_by()`, passing sentiment without quotes.
+* Get the total count of each sentiment.
+  + Call `summarize()`, setting `total_count` equal to the `sum()` of count.
+  + Assign the result to `oz_plutchik`
+* Create a bar plot with `ggplot()`.
+  + Pass in `oz_plutchik` to the `data` argument.
+  + Then specify the `x` and `y` aesthetics, calling `aes()` and passing `sentiment` and `total_count` without quotes.
+  + Add a column geom with `geom_col()`. (This is the same as `geom_bar()`, but doesn't summarize the data, since you've done that already.)
+
+```{r}
+# data prep
+plaintxt <- readLines("/Users/lbarcelo/R_Repo/DataCamp/Sentiment Analysis in R/Data/oz.txt")
+startstr <- "START OF THIS PROJECT GUTENBERG EBOOK THE WONDERFUL WIZARD OF OZ"
+endstr <- "End of Project Gutenberg's The Wonderful Wizard of Oz, by L. Frank Baum"
+plaintxt_short <- plaintxt[(stringr::str_which(plaintxt, startstr) + 1):(stringr::str_which(plaintxt, endstr) - 1)]
+plaintxt_short <- plaintxt_short[plaintxt_short != ""]
+txt_vec <- tm::VectorSource(plaintxt_short)
+txt_corp <- tm::VCorpus(txt_vec)
+txt_clean <- clean_corpus(txt_corp)
+txt_dtm <- tm::DocumentTermMatrix(txt_clean)
+oz_tidy <- tidytext::tidy(txt_dtm)
+oz <- oz_tidy
+
+##################################################################################
+# Tidytext way to do something similar [probably with less text cleaning]
+plaintxt_short_df <- as.data.frame(plaintxt_short)
+plaintxt_short_df$plaintxt_short <- as.character(plaintxt_short_df$plaintxt_short)
+z2 <- plaintxt_short_df %>%  
+  mutate(linenumber = row_number()) %>% 
+  unnest_tokens(output = "word", input = plaintxt_short) %>% 
+  anti_join(stop_words) %>% 
+  count(word, sort = T)
+##################################################################################
+
+oz_plutchik <- oz %>% 
+  inner_join(get_sentiments("nrc"), by = c("term" = "word")) %>% 
+  filter(!sentiment %in% c("positive", "negative")) %>% 
+  group_by(sentiment) %>% 
+  summarize(total_count = sum(count))
+
+oz_plutchik %>% ggplot(aes(x = sentiment, y = total_count)) +
+  geom_col()
+```
+
+# 3rd Segment - Visualizing sentiment
+
+## Unhappy ending? Chronological polarity
+
+Sometimes you want to track sentiment over time. For example, during an ad campaign you could track brand sentiment to see the campaign's effect. You saw a few examples of this at the end of the last chapter.
+
+In this exercise you'll recap the workflow for exploring sentiment over time using the novel Moby Dick. One should expect that happy moments in the book would have more positive words than negative. Conversely dark moments and sad endings should use more negative language. You'll also see some tricks to make your sentiment time series more visually appealling.
+
+Recall that the workflow is:
+
+1. Inner join the text to the lexicon by word.
+2. Count the sentiments by line.
+3. Reshape the data so each sentiment has its own column.
+4. (Depending upon the lexicon) Calculate the polarity as positive score minus negative score.
+5. Draw the polarity time series.
+
+This exercise should look familiar: it extends Bing tidy polarity: Call me Ishmael (with ggplot2)!.
+
+#### Instructions
+* `inner_join()` the pre-loaded tidy version of Moby Dick, `moby`, to the `bing` lexicon.
+  + Join by the `"term"` column in the text and the `"word"` column in the lexicon.
+* Count by sentiment and index.
+* Reshape so that each sentiment has its own column using spread() with the column sentiment and the counts column called n.
+  + Also specify `fill = 0` to fill out missing values with a zero.
+* Using mutate() add two columns: polarity and line_number.
+Set polarity equal to the positive score minus the negative score.
+Set line_number equal to the row number using the row_number() function.
+* Create a sentiment time series with `ggplot()`.
+  + Pass in `moby_polarity` to the `data` argument.
+  + Call `aes()` and pass in `line_number` and `polarity` without quotes.
+  + Add a smoothed curve with `geom_smooth()`.
+  + Add a red horizontal line at zero by calling `geom_hline()`, with parameters `0` and `"red"`.
+  + Add a title with `ggtitle()` set to `"Moby Dick Chronological Polarity"`
+
+```{r}
+moby_polarity <- moby %>% 
+  inner_join(get_sentiments("bing"), by = c("term" = "word")) %>% 
+  count(sentiment, index) %>% 
+  spread(sentiment, n, fill = 0) %>% 
+  mutate(polarity = positive - negative, line_number = row_number())
+
+moby_polarity %>% ggplot(aes(x = line_number, y = polarity)) +
+  geom_smooth() +
+  geom_hline(yintercept = 0, col = "red") +
+  ggtitle("Moby Dick Chronological Polarity") + 
+  theme_gdocs()
+```
+
+## Word impact, frequency analysis
+
+One of the easiest ways to explore data is with a frequency analysis. Although not difficult, in sentiment analysis this simple method can be surprisingly illuminating. Specifically, you will build a barplot. In this exercise you are once again working with `moby` and `bing` to construct your visual.
+
+**To get the bars ordered from lowest to highest, you will use a trick with factors**. `reorder()` lets you change the order of factor levels based upon another scoring variable. In this case, you will reorder the factor variable term by the scoring variable polarity.
+
+#### Instructions
+* Create `moby_tidy_sentiment`.
+  - inner join with `bing`
+  - Use `count()` with `term`, `sentiment`, and `wt = count`.
+  - Pipe to `spread()` with `sentiment`, `n`, and `fill = 0`.
+  - Pipe to `mutate()`. Call the new variable `polarity`; calculated as positive minus negative.
+* Call `moby_tidy_sentiment` to review and compare it to the previous exercise.
+* Use `filter()` on `moby_tidy_sentiment` to keep rows where the absolute polarity is greater than or equal to 50. `abs()` gives you absolute values.
+* `mutate()` a new vector `pos_or_neg` with an `ifelse()` function checking if `polarity > 0` then declare the document `"positive"` else declare it `"negative"`.
+* Using `moby_tidy_pol`, plot `polarity` vs. `term`, reordered by `polarity` `(reorder(term, polarity)`), `fill`ed by `pos_or_neg`. ass `geom_col()` and title.
+* Inside `element_text()`, rotate the x-axis text `90` degrees by setting `angle = 90` and shifting the vertical justification with `vjust = -0.1`.
+
+```{r}
+moby_tidy_sentiment <- moby %>% 
+  inner_join(get_sentiments("bing"), by = c("term" = "word")) %>% 
+  count(term, sentiment, wt = count) %>% 
+  spread(sentiment, n, fill = 0) %>% 
+  mutate(polarity = positive - negative)
+
+moby_tidy_pol <- moby_tidy_sentiment %>%
+  filter(abs(polarity) >= 50) %>% 
+  mutate(pos_or_neg = ifelse(polarity > 0, "positive", "negative"))
+
+moby_tidy_pol %>% ggplot(aes(x = reorder(term, polarity), y = polarity, fill = pos_or_neg)) +
+  geom_col() +
+  ggtitle("Moby Dick: Sentiment Word Frequency") + 
+  theme_gdocs() +
+  theme(axis.text.x = element_text(angle = 90, vjust = -0.1))
+```
+
+## Divide & conquer: Using polarity for a comparison cloud
+
+Now that you have seen how polarity can be used to divide a corpus, let's do it! This code will walk you through dividing a corpus based on sentiment so you can peer into the informaton in subsets instead of holistically.
+
+Your R session has `oz_pol` which was created by applying `polarity()` to "The Wonderful Wizard of Oz."
+
+For simplicity's sake, we created a simple custom function called `pol_subsections()` which will divide the corpus by polarity score. First, the function accepts a data frame with each row being a sentence or document of the corpus. The data frame is subset anywhere the polarity values are greater than or less than 0. Finally, the positive and negative sentences, non-zero polarities, are pasted with parameter collapse so that the terms are grouped into a single corpus. Lastly, the two documents are concatenated into a single vector of two distinct documents.
+
+> pol_subsections <- function(df) {  
+>   x.pos <- subset(df$text, df$polarity > 0)  
+>   x.neg <- subset(df$text, df$polarity < 0)  
+>   x.pos <- paste(x.pos, collapse = " ")  
+>   x.neg <- paste(x.neg, collapse = " ")  
+>   all.terms <- c(x.pos, x.neg)  
+>  return(all.terms)    
+> }
+
+At this point you have omitted the neutral sentences and want to focus on organizing the remaining text. In this exercise we use the `%>%` operator again to forward objects to functions. After some simple cleaning use `comparison.cloud()` to make the visual.
+
 
